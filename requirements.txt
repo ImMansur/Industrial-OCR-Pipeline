@@ -1,0 +1,7 @@
+azure-ai-formrecognizer==3.3.3
+openai>=1.0.0
+pandas
+openpyxl
+python-dotenv
+python-magic-bin; sys_platform == 'win32'
+python-magic; sys_platform != 'win32'
