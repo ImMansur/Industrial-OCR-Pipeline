@@ -165,6 +165,43 @@ def extract_equipment_summary(tables):
         ", ".join(dict.fromkeys(serials)) or None
     )
 
+
+def generate_recommendation(structured_info, client):
+    """Use OpenAI to generate a short professional recommendation from structured certificate data."""
+    if not isinstance(structured_info, dict):
+        raise ValueError("structured_info must be a dict")
+
+    prompt = f"""
+Based on the extracted certificate fields below, provide one short professional recommendation in 1–2 lines.
+- Detect missing fields and flag missing Part Numbers or Serial Numbers.
+- Detect old, missing, or expired recertification dates.
+- Indicate if the certificate data looks complete.
+- Use a business-friendly tone and do not repeat generic responses.
+
+Certificate Date: {structured_info.get('Certificate Date', 'N/A')}
+Recertification Due Date: {structured_info.get('Recertification Due Date', 'N/A')}
+Equipment Or Description: {structured_info.get('Equipment Or Description', 'N/A')}
+Part Numbers: {structured_info.get('Part Numbers', structured_info.get('Part Number', 'N/A'))}
+Serial Numbers: {structured_info.get('Serial Or Lot Numbers', structured_info.get('Serial Numbers', 'N/A'))}
+"""
+
+    response = client.client.chat.completions.create(
+        model=client.deployment_name,
+        messages=[
+            {"role": "system", "content": "You are a professional assistant that generates concise certificate review recommendations."},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=60,
+        temperature=0.3
+    )
+
+    recommendation = str(response.choices[0].message.content).strip()
+    if not recommendation:
+        raise ValueError("Recommendation generation returned empty text")
+
+    return recommendation
+
+
 def process_document(file_path):
     print(f"--- Processing: {os.path.basename(file_path)} ---")
     
@@ -192,6 +229,14 @@ def process_document(file_path):
         structured_info["Part Numbers"] = part_numbers
     if serial_numbers:
         structured_info["Serial Or Lot Numbers"] = serial_numbers
+
+    existing_recommendation = structured_info.get("Recommendation")
+    if existing_recommendation is None or not str(existing_recommendation).strip():
+        try:
+            structured_info["Recommendation"] = generate_recommendation(structured_info, structurer)
+        except Exception as e:
+            print(f"Warning: Recommendation generation failed: {e}")
+            structured_info["Recommendation"] = "Manual review required"
 
     extracted_data["structured_info"] = structured_info
     
